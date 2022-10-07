@@ -1,0 +1,130 @@
+name: Build and deploy Java images
+
+on:
+  push:
+    branches: [main]
+    workflow_dispatch:
+
+# tag::adocGitHubActionsWorkflowBase[]
+env:
+  REGISTRY_URL: <YOUR_REGISTRY_URL>.azurecr.io
+  PROJECT: java-runtimes
+  RESOURCE_GROUP: rg-java-runtimes
+  QUARKUS_APP: quarkus-app
+  MICRONAUT_APP: micronaut-app
+  SPRING_APP: springboot-app
+
+# A workflow run is made up of one or more jobs.
+# Unless you specify dependencies, jobs run in parallel by default.
+jobs:
+
+  # Define our "build" job, that will be the CI part of our pipeline
+  build:
+    # The type of runner that the job will run on.
+    # Many runners are available, including Windows, macOS, and Linux.
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks (actions) that will be executed as
+    # part of the job.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to container registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+# end::adocGitHubActionsWorkflowBase[]
+
+      # tag::adocBuild[]
+      - name: Build Quarkus with Java
+        run: |
+          cd quarkus-app && ./mvnw package
+      - name: Build Micronaut with Java
+        run: |
+          cd micronaut-app && ./mvnw package
+      - name: Build Spring Boot with Java
+        run: |
+          cd springboot-app && ./mvnw package  && mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+      # end::adocBuild[]
+
+      # tag::adocPush[]
+      - name: Build and push Quarkus Java image to registry
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ env.REGISTRY_URL }}/${{ env.PROJECT }}/${{ env.QUARKUS_APP }}:${{ github.sha }}
+          file: ./quarkus-app/src/main/docker/Dockerfile.jvm
+          context: ./quarkus-app/
+
+      - name: Build and push Micronaut Java image to registry
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ env.REGISTRY_URL }}/${{ env.PROJECT }}/${{ env.MICRONAUT_APP }}:${{ github.sha }}
+          file: ./micronaut-app/src/main/docker/Dockerfile.jvm
+          context: ./micronaut-app/
+
+      - name: Build and push Spring Boot Java image to registry
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ env.REGISTRY_URL }}/${{ env.PROJECT }}/${{ env.SPRING_APP }}:${{ github.sha }}
+          file: ./springboot-app/src/main/docker/Dockerfile.jvm
+          context: ./springboot-app/
+      # end::adocPush[]
+
+  # tag::adocDeploy[]
+  # Define our "deploy" job, that will be the CD part of our pipeline
+  deploy:
+    runs-on: ubuntu-latest
+
+    # This job needs to run after the "build" job, so we'll add a dependency on it
+    needs: build
+    
+    steps:
+      # Log in to Azure to be able to deploy our apps
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Use the Azure CLI to deploy our apps
+      - name: Deploy to Azure Container Apps
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az config set extension.use_dynamic_install=yes_without_prompt
+            
+            az containerapp update \
+              --name ${{ env.QUARKUS_APP }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image ${{ env.REGISTRY_URL }}/${{ env.PROJECT }}/${{ env.QUARKUS_APP }}:${{ github.sha }} \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv
+
+            az containerapp update \
+              --name ${{ env.MICRONAUT_APP }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image ${{ env.REGISTRY_URL }}/${{ env.PROJECT }}/${{ env.MICRONAUT_APP }}:${{ github.sha }} \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv
+
+            az containerapp update \
+              --name ${{ env.SPRING_APP }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image ${{ env.REGISTRY_URL }}/${{ env.PROJECT }}/${{ env.SPRING_APP }}:${{ github.sha }} \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv
+  # end::adocDeploy[]

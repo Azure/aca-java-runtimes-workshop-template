@@ -1,0 +1,27 @@
+micronaut:
+  application:
+    name: MicronautApp
+  server:
+    port: 8802
+netty:
+  default:
+    allocator:
+      max-order: 3
+datasources:
+  default:
+    dialect: POSTGRES
+    url: jdbc:tc:postgresql:14-alpine://testcontainers/postgres
+    username: postgres
+    password: password
+    driverClassName: org.testcontainers.jdbc.ContainerDatabaseDriver
+jpa:
+  default:
+    entity-scan:
+      packages: 'io.containerapps.javaruntime.workshop.micronaut'
+    properties:
+      hibernate:
+        bytecode:
+          provider: none
+        hbm2ddl:
+          auto: create-drop
+        show_sql: true

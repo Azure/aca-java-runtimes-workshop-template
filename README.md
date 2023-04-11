@@ -1,6 +1,6 @@
 # Azure Container Apps Java Runtimes Workshop
 
-[Check the Workshop](https://azure.github.io/aca-java-runtimes-workshop).
+[Check the Workshop](https://aka.ms/java-runtimes).
 
 ## Quarkus
 
@@ -43,7 +43,7 @@ To build a Docker image with the native application (you need to build the nativ
 docker build -t micronaut-app-native -f src/main/docker/Dockerfile.native .
 ```
 
-## SpringBoot
+## Spring Boot
 
 ```shell
 cd springboot-app
@@ -55,7 +55,7 @@ curl 'localhost:8703/springboot'  # Invokes the hello endpoint
 
 To build a native application (you need GraalVM installed):
 ```shell
-mvn -Pnative clean package
+mvn -Pnative clean native:compile
 ./target/springboot-app
 ```
 
